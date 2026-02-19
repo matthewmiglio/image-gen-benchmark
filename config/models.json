@@ -1,0 +1,53 @@
+{
+  "models": [
+    {
+      "id": "ltx-video-2",
+      "name": "LTX-Video 2 (Lightricks)",
+      "repo": "Lightricks/LTX-2",
+      "pipeline": "diffusers",
+      "enabled": true
+    },
+    {
+      "id": "hunyuan-video",
+      "name": "Hunyuan Video (Tencent)",
+      "repo": "tencent/HunyuanVideo",
+      "pipeline": "diffusers",
+      "enabled": true
+    },
+    {
+      "id": "open-sora-v2",
+      "name": "Open-Sora v2",
+      "repo": "hpcai-tech/Open-Sora-v2",
+      "pipeline": "custom",
+      "enabled": true
+    },
+    {
+      "id": "wan-2.2",
+      "name": "Wan 2.2",
+      "repo": "Wan-AI/Wan2.2-T2V-A14B",
+      "pipeline": "diffusers",
+      "enabled": true
+    },
+    {
+      "id": "skyreels-v1",
+      "name": "SkyReels V1",
+      "repo": "Skywork/SkyReels-V1-Hunyuan-T2V",
+      "pipeline": "diffusers",
+      "enabled": true
+    },
+    {
+      "id": "mochi-1",
+      "name": "Mochi 1 (Genmo)",
+      "repo": "genmo/mochi-1-preview",
+      "pipeline": "diffusers",
+      "enabled": true
+    },
+    {
+      "id": "cogvideox-5b",
+      "name": "CogVideoX-5B",
+      "repo": "THUDM/CogVideoX-5b",
+      "pipeline": "diffusers",
+      "enabled": true
+    }
+  ]
+}

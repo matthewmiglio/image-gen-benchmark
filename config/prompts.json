@@ -1,0 +1,35 @@
+{
+  "params": {
+    "seeds": [42, 123, 7],
+    "resolution": [1280, 720],
+    "frame_count": 81,
+    "cfg_scale": 7.0,
+    "steps": 50
+  },
+  "prompts": [
+    {
+      "id": "blitz_blunder",
+      "text": "5-second cinematic video of a focused chess player in a dimly lit room playing blitz online, a sudden blunder happens on the board, opponent instantly plays a winning tactic, the clock ticks loudly, the player facepalms in frustration, dramatic lighting, shallow depth of field, realistic 4K style."
+    },
+    {
+      "id": "puzzle_montage",
+      "text": "5-second fast montage video of random online chess puzzles flashing rapidly on screen, different board positions every second, chaotic cuts, timer counting down, glitch transitions, confused player expression, high-energy editing, modern UI style."
+    },
+    {
+      "id": "pattern_recognition",
+      "text": "5-second cinematic video of a chess board freezing mid-game, tactical patterns glowing clearly on the board including a fork, a pin, and a back-rank mate, arrows highlighting the winning move, lighting shifts from dark to bright, confident player expression, smooth camera zoom."
+    },
+    {
+      "id": "training_cycles",
+      "text": "5-second clean tech-style video of a modern chess training interface repeating the same puzzle set labeled Cycle 1, Cycle 2, Cycle 3, each cycle solving faster than the last, timer shrinking dramatically, subtle neural network animation in the background, sleek dark SaaS aesthetic."
+    },
+    {
+      "id": "split_screen_progress",
+      "text": "5-second split-screen video showing Cycle 1 on the left with slow calculation and long timer, and Cycle 5 on the right with instant confident move and short timer, bright success animation, rating increase visual, esports-style overlay."
+    },
+    {
+      "id": "brand_reveal",
+      "text": "5-second cinematic brand reveal video with a dark minimalist background, subtle particle effects, the ChessPecker logo fading smoothly into the center, clean modern typography displaying \"Train Smarter. Gain Rating.\" premium polished look, soft dramatic sound swell."
+    }
+  ]
+}

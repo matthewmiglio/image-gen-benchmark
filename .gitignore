@@ -1,0 +1,6 @@
+output/
+__pycache__/
+*.pyc
+docs/
+.venv/
+poetry.lock
