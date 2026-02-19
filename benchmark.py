@@ -11,6 +11,9 @@ import os
 import time
 from pathlib import Path
 
+# Enable fast Rust-based downloads via hf_transfer
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+
 ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = ROOT / "config"
 
@@ -49,6 +52,17 @@ def get_hf_token() -> str | None:
         return None
 
 
+IGNORE_PATTERNS = [
+    "*.md",
+    "*.txt",
+    ".gitattributes",
+    "assets/*",
+    "*.png",
+    "*.jpg",
+    "*.gif",
+]
+
+
 def download_model(model_cfg: dict, model_dir: Path) -> Path:
     """Download model weights from HuggingFace if not already cached."""
     from huggingface_hub import snapshot_download
@@ -56,7 +70,9 @@ def download_model(model_cfg: dict, model_dir: Path) -> Path:
     repo = model_cfg["repo"]
     local_path = model_dir / model_cfg["id"]
     print(f"[download] Checking {model_cfg['name']} ({repo}) ...")
-    if local_path.exists() and any(local_path.iterdir()):
+    if local_path.exists() and any(
+        p.name != ".cache" for p in local_path.iterdir()
+    ):
         print(f"  [skip] Already downloaded at {local_path}")
         return local_path
     print(f"  [download] Downloading to {local_path} ...")
@@ -65,6 +81,7 @@ def download_model(model_cfg: dict, model_dir: Path) -> Path:
         repo_id=repo,
         local_dir=str(local_path),
         token=token,
+        ignore_patterns=IGNORE_PATTERNS,
     )
     print(f"  [done] {model_cfg['name']} ready at {local_path}")
     return local_path

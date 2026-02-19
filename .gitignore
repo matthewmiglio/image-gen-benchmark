@@ -4,3 +4,4 @@ __pycache__/
 docs/
 .venv/
 poetry.lock
+.claude/

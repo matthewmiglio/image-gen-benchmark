@@ -32,29 +32,15 @@ git clone <repo-url> && cd image-gen-benchmark
 poetry install
 ```
 
-### HuggingFace token
+### HuggingFace authentication
 
-Some model repos are gated and require authentication. Create a token at https://huggingface.co/settings/tokens (needs read access), then set it as an environment variable.
-
-**PowerShell (Windows):**
-
-```powershell
-# Current session
-$env:HF_TOKEN = "hf_your_token_here"
-
-# Permanent (persists across sessions)
-[System.Environment]::SetEnvironmentVariable("HF_TOKEN", "hf_your_token_here", "User")
-```
-
-**Bash (Linux/macOS):**
+Some model repos are gated and require authentication. Create a token at https://huggingface.co/settings/tokens (read access), then log in once:
 
 ```bash
-# Current session
-export HF_TOKEN=hf_your_token_here
-
-# Permanent
-echo 'export HF_TOKEN=hf_your_token_here' >> ~/.bashrc
+poetry run python -c "from huggingface_hub import login; login(token='hf_your_token_here')"
 ```
+
+This stores your token locally at `~/.cache/huggingface/token`. Downloads use `hf_transfer` (a Rust-based parallel downloader) automatically for significantly faster speeds.
 
 ## Configure
 
