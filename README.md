@@ -28,7 +28,7 @@ Models can be toggled on/off in `config/models.json`.
 Requires Python 3.11+, a CUDA-capable GPU (RTX 4090+ recommended), and [Poetry](https://python-poetry.org/).
 
 ```bash
-git clone <repo-url> && cd image-gen-benchmark
+git clone https://github.com/matthewmiglio/image-gen-benchmark.git && cd image-gen-benchmark
 poetry install
 ```
 
