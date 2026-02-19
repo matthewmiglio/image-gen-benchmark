@@ -1,4 +1,4 @@
-# image-gen-benchmark
+# video-gen-benchmark
 
 Benchmark harness for comparing open-weight text-to-video models under controlled conditions. Generates multiple videos per prompt across every model using identical parameters (resolution, seeds, CFG, steps, frame count), then organizes outputs for side-by-side comparison.
 
