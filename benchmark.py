@@ -14,6 +14,41 @@ from pathlib import Path
 # Enable fast Rust-based downloads via hf_transfer
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
+
+def check_hf_transfer():
+    """Verify hf_transfer is installed and enabled, warn loudly if not."""
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    try:
+        import hf_transfer  # noqa: F401
+        available = True
+    except ImportError:
+        available = False
+
+    enabled = os.environ.get("HF_HUB_ENABLE_HF_TRANSFER") == "1"
+
+    if available and enabled:
+        print(f"{GREEN}{BOLD}[OK] hf_transfer is installed and enabled - fast downloads active{RESET}")
+        return
+
+    print(f"\n{RED}{BOLD}{'='*70}")
+    print(f"  WARNING: FAST DOWNLOADS NOT ACTIVE")
+    print(f"{'='*70}{RESET}")
+
+    if not available:
+        print(f"{YELLOW}  hf_transfer package is NOT installed.{RESET}")
+        print(f"{YELLOW}  Install it with: pip install hf_transfer{RESET}")
+
+    if not enabled:
+        print(f"{YELLOW}  HF_HUB_ENABLE_HF_TRANSFER is not set to '1'.{RESET}")
+
+    print(f"{RED}{BOLD}  Downloads will be 5-10x slower without hf_transfer!{RESET}")
+    print(f"{RED}{BOLD}{'='*70}{RESET}\n")
+
 ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = ROOT / "config"
 
@@ -133,6 +168,7 @@ def run_benchmark(model_ids: list[str] | None = None, download_only: bool = Fals
     print(f"Output directory: {output_dir}")
 
     # --- Download phase ---
+    check_hf_transfer()
     for model in models:
         download_model(model, model_dir)
 
