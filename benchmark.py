@@ -8,6 +8,11 @@ enabled model x prompt x seed combination. Outputs land in output/.
 import argparse
 import json
 import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -48,6 +53,39 @@ def check_hf_transfer():
 
     print(f"{RED}{BOLD}  Downloads will be 5-10x slower without hf_transfer!{RESET}")
     print(f"{RED}{BOLD}{'='*70}{RESET}\n")
+
+class Spinner:
+    """Background spinner that shows elapsed time."""
+
+    FRAMES = ["|", "/", "-", "\\"]
+
+    def __init__(self, message: str):
+        self._message = message
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+
+    def _spin(self):
+        t0 = time.time()
+        i = 0
+        while not self._stop.is_set():
+            elapsed = time.time() - t0
+            frame = self.FRAMES[i % len(self.FRAMES)]
+            sys.stdout.write(f"\r  {frame} {self._message} ({elapsed:.0f}s)")
+            sys.stdout.flush()
+            i += 1
+            self._stop.wait(0.2)
+        elapsed = time.time() - t0
+        sys.stdout.write(f"\r  [done] {self._message} ({elapsed:.1f}s)\n")
+        sys.stdout.flush()
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        self._thread.join()
+
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = ROOT / "config"
@@ -99,7 +137,17 @@ IGNORE_PATTERNS = [
 
 
 def download_model(model_cfg: dict, model_dir: Path) -> Path:
-    """Download model weights from HuggingFace if not already cached."""
+    """Download model weights from HuggingFace if not already cached.
+
+    For models with pipeline=="custom", uses snapshot_download to a local dir.
+    For diffusers models, downloading is deferred to load_pipeline() which
+    calls from_pretrained (handles its own caching).
+    """
+    if model_cfg.get("pipeline") != "custom":
+        repo = model_cfg.get("diffusers_repo", model_cfg["repo"])
+        print(f"[download] {model_cfg['name']} ({repo}) - will download on first load if needed")
+        return model_dir / model_cfg["id"]
+
     from huggingface_hub import snapshot_download
 
     repo = model_cfg["repo"]
@@ -126,20 +174,249 @@ def download_model(model_cfg: dict, model_dir: Path) -> Path:
 # Generation
 # ---------------------------------------------------------------------------
 
+def _get_model_repo(model_cfg: dict) -> str:
+    """Return the HF repo ID to use for from_pretrained."""
+    return model_cfg.get("diffusers_repo", model_cfg["repo"])
+
+
 def load_pipeline(model_cfg: dict, model_dir: Path):
-    """Load and return an inference pipeline for the given model."""
-    local_path = model_dir / model_cfg["id"]
-    # TODO: branch on model_cfg["pipeline"] to load diffusers / custom pipelines
-    raise NotImplementedError(
-        f"Pipeline loading for {model_cfg['id']} not yet implemented. "
-        f"Weights at: {local_path}"
-    )
+    """Load and return an inference pipeline for the given model.
+
+    Returns a dict with 'pipe' (the pipeline object), 'id' (model id),
+    and any extra keys needed for generation / export.
+    """
+    import torch
+
+    model_id = model_cfg["id"]
+    source = _get_model_repo(model_cfg)
+    token = get_hf_token()
+    print(f"  [load] Loading {model_id} from {source} ...")
+
+    if model_id == "ltx-video-2":
+        from diffusers import LTXPipeline
+        with Spinner(f"Loading {model_id} weights"):
+            pipe = LTXPipeline.from_pretrained(
+                source, torch_dtype=torch.bfloat16, token=token,
+            )
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "hunyuan-video":
+        from diffusers import HunyuanVideoPipeline, HunyuanVideoTransformer3DModel
+        with Spinner(f"Loading {model_id} weights"):
+            transformer = HunyuanVideoTransformer3DModel.from_pretrained(
+                source, subfolder="transformer",
+                torch_dtype=torch.bfloat16, token=token,
+            )
+            pipe = HunyuanVideoPipeline.from_pretrained(
+                source, transformer=transformer,
+                torch_dtype=torch.float16, token=token,
+            )
+            pipe.vae.enable_tiling()
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "wan-2.2":
+        from diffusers import AutoencoderKLWan, WanPipeline
+        with Spinner(f"Loading {model_id} weights"):
+            vae = AutoencoderKLWan.from_pretrained(
+                source, subfolder="vae",
+                torch_dtype=torch.float32, token=token,
+            )
+            pipe = WanPipeline.from_pretrained(
+                source, vae=vae,
+                torch_dtype=torch.bfloat16, token=token,
+            )
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "skyreels-v1":
+        from diffusers import HunyuanVideoPipeline, HunyuanVideoTransformer3DModel
+        local_transformer = model_dir / model_cfg["id"]
+        with Spinner(f"Loading {model_id} weights"):
+            transformer = HunyuanVideoTransformer3DModel.from_pretrained(
+                str(local_transformer), torch_dtype=torch.bfloat16, token=token,
+            )
+            base_source = model_cfg.get("diffusers_repo", "hunyuanvideo-community/HunyuanVideo")
+            pipe = HunyuanVideoPipeline.from_pretrained(
+                base_source, transformer=transformer,
+                torch_dtype=torch.float16, token=token,
+            )
+            pipe.vae.enable_tiling()
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "mochi-1":
+        from diffusers import MochiPipeline
+        with Spinner(f"Loading {model_id} weights"):
+            pipe = MochiPipeline.from_pretrained(
+                source, variant="bf16",
+                torch_dtype=torch.bfloat16, token=token,
+            )
+            pipe.enable_vae_tiling()
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "cogvideox-5b":
+        from diffusers import CogVideoXPipeline
+        with Spinner(f"Loading {model_id} weights"):
+            pipe = CogVideoXPipeline.from_pretrained(
+                source, torch_dtype=torch.bfloat16, token=token,
+            )
+            pipe.vae.enable_tiling()
+            pipe.enable_model_cpu_offload()
+        return {"pipe": pipe, "id": model_id}
+
+    if model_id == "open-sora-v2":
+        return {"pipe": None, "id": model_id, "model_dir": model_dir}
+
+    raise ValueError(f"Unknown model id: {model_id}")
 
 
-def generate_video(pipeline, prompt_text: str, seed: int, params: dict) -> bytes:
-    """Run a single generation and return raw video bytes."""
-    # TODO: call pipeline with prompt, seed, resolution, frame_count, cfg, steps
-    raise NotImplementedError("Video generation not yet implemented.")
+# Per-model default FPS for export
+MODEL_FPS = {
+    "ltx-video-2": 24,
+    "hunyuan-video": 15,
+    "wan-2.2": 16,
+    "skyreels-v1": 15,
+    "mochi-1": 30,
+    "cogvideox-5b": 8,
+    "open-sora-v2": 24,
+}
+
+
+def generate_video(
+    pipeline_info: dict,
+    prompt_text: str,
+    seed: int,
+    params: dict,
+    out_path: Path,
+):
+    """Run a single generation and save the result to out_path."""
+    import torch
+    from diffusers.utils import export_to_video
+
+    model_id = pipeline_info["id"]
+    pipe = pipeline_info["pipe"]
+    generator = torch.Generator(device="cuda").manual_seed(seed)
+    w, h = params["resolution"]
+    num_frames = params["frame_count"]
+    steps = params["steps"]
+    cfg = params["cfg_scale"]
+    fps = MODEL_FPS[model_id]
+
+    if model_id == "ltx-video-2":
+        output = pipe(
+            prompt=prompt_text,
+            width=w, height=h,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "hunyuan-video":
+        output = pipe(
+            prompt=prompt_text,
+            height=h, width=w,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "wan-2.2":
+        output = pipe(
+            prompt=prompt_text,
+            height=h, width=w,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "skyreels-v1":
+        output = pipe(
+            prompt=prompt_text,
+            negative_prompt="Aerial view, overexposed, low quality, deformation",
+            height=h, width=w,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=1.0,
+            true_cfg_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "mochi-1":
+        output = pipe(
+            prompt=prompt_text,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "cogvideox-5b":
+        output = pipe(
+            prompt=prompt_text,
+            height=h, width=w,
+            num_frames=num_frames,
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, str(out_path), fps=fps)
+        return
+
+    if model_id == "open-sora-v2":
+        _generate_open_sora(pipeline_info, prompt_text, seed, params, out_path)
+        return
+
+    raise ValueError(f"Unknown model id: {model_id}")
+
+
+def _generate_open_sora(
+    pipeline_info: dict,
+    prompt_text: str,
+    seed: int,
+    params: dict,
+    out_path: Path,
+):
+    """Generate a video using Open-Sora v2 via its CLI scripts."""
+    model_dir = pipeline_info["model_dir"]
+    repo_dir = model_dir / "open-sora-v2-repo"
+
+    if not (repo_dir / "scripts").exists():
+        print("  [setup] Cloning Open-Sora v2 repo ...")
+        subprocess.run(
+            ["git", "clone", "https://github.com/hpcaitech/Open-Sora", str(repo_dir)],
+            check=True,
+        )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cmd = [
+            "torchrun", "--nproc_per_node", "1", "--standalone",
+            str(repo_dir / "scripts" / "diffusion" / "inference.py"),
+            str(repo_dir / "configs" / "diffusion" / "inference" / "768px.py"),
+            "--save-dir", tmp_dir,
+            "--prompt", prompt_text,
+        ]
+        subprocess.run(cmd, check=True, cwd=str(repo_dir))
+
+        generated = list(Path(tmp_dir).glob("*.mp4"))
+        if not generated:
+            raise RuntimeError("Open-Sora v2 did not produce any mp4 output")
+        shutil.copy2(str(generated[0]), str(out_path))
 
 
 def run_benchmark(model_ids: list[str] | None = None, download_only: bool = False):
@@ -205,10 +482,9 @@ def run_benchmark(model_ids: list[str] | None = None, download_only: bool = Fals
 
                 print(f"  [gen] {model['id']} / {prompt['id']} / seed={seed} ...")
                 t0 = time.time()
-                video_bytes = generate_video(pipeline, prompt["text"], seed, params)
+                generate_video(pipeline, prompt["text"], seed, params, out_path)
                 elapsed = time.time() - t0
 
-                out_path.write_bytes(video_bytes)
                 meta["runs"].append({
                     "seed": seed,
                     "file": out_path.name,

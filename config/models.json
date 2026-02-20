@@ -11,6 +11,7 @@
       "id": "hunyuan-video",
       "name": "Hunyuan Video (Tencent)",
       "repo": "tencent/HunyuanVideo",
+      "diffusers_repo": "hunyuanvideo-community/HunyuanVideo",
       "pipeline": "diffusers",
       "enabled": true
     },
@@ -25,6 +26,7 @@
       "id": "wan-2.2",
       "name": "Wan 2.2",
       "repo": "Wan-AI/Wan2.2-T2V-A14B",
+      "diffusers_repo": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
       "pipeline": "diffusers",
       "enabled": true
     },
@@ -32,6 +34,7 @@
       "id": "skyreels-v1",
       "name": "SkyReels V1",
       "repo": "Skywork/SkyReels-V1-Hunyuan-T2V",
+      "diffusers_repo": "hunyuanvideo-community/HunyuanVideo",
       "pipeline": "diffusers",
       "enabled": true
     },
