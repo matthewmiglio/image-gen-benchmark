@@ -92,7 +92,23 @@ CONFIG_DIR = ROOT / "config"
 
 
 def load_settings() -> dict:
-    settings = load_json(CONFIG_DIR / "settings.json")
+    settings_path = CONFIG_DIR / "settings.json"
+    if not settings_path.exists():
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        print("No settings.json found. Let's set up your directories.\n")
+        while True:
+            model_dir = input("Enter a folder path for storing models: ").strip()
+            if model_dir and Path(model_dir).parent.exists():
+                break
+            print("Invalid path. Parent directory must exist. Try again.")
+        settings = {
+            "model_dir": model_dir,
+            "output_dir": str(ROOT / "output"),
+        }
+        with open(settings_path, "w") as f:
+            json.dump(settings, f, indent=2)
+        print(f"\nSettings saved to {settings_path}\n")
+    settings = load_json(settings_path)
     return {
         "model_dir": Path(settings["model_dir"]),
         "output_dir": Path(settings["output_dir"]),
@@ -192,11 +208,14 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
     token = get_hf_token()
     print(f"  [load] Loading {model_id} from {source} ...")
 
+    cache = str(model_dir)
+
     if model_id == "ltx-video-2":
-        from diffusers import LTXPipeline
+        from diffusers.pipelines.ltx2 import LTX2Pipeline
         with Spinner(f"Loading {model_id} weights"):
-            pipe = LTXPipeline.from_pretrained(
+            pipe = LTX2Pipeline.from_pretrained(
                 source, torch_dtype=torch.bfloat16, token=token,
+                cache_dir=cache,
             )
             pipe.enable_model_cpu_offload()
         return {"pipe": pipe, "id": model_id}
@@ -207,10 +226,12 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
             transformer = HunyuanVideoTransformer3DModel.from_pretrained(
                 source, subfolder="transformer",
                 torch_dtype=torch.bfloat16, token=token,
+                cache_dir=cache,
             )
             pipe = HunyuanVideoPipeline.from_pretrained(
                 source, transformer=transformer,
                 torch_dtype=torch.float16, token=token,
+                cache_dir=cache,
             )
             pipe.vae.enable_tiling()
             pipe.enable_model_cpu_offload()
@@ -222,10 +243,12 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
             vae = AutoencoderKLWan.from_pretrained(
                 source, subfolder="vae",
                 torch_dtype=torch.float32, token=token,
+                cache_dir=cache,
             )
             pipe = WanPipeline.from_pretrained(
                 source, vae=vae,
                 torch_dtype=torch.bfloat16, token=token,
+                cache_dir=cache,
             )
             pipe.enable_model_cpu_offload()
         return {"pipe": pipe, "id": model_id}
@@ -241,6 +264,7 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
             pipe = HunyuanVideoPipeline.from_pretrained(
                 base_source, transformer=transformer,
                 torch_dtype=torch.float16, token=token,
+                cache_dir=cache,
             )
             pipe.vae.enable_tiling()
             pipe.enable_model_cpu_offload()
@@ -252,6 +276,7 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
             pipe = MochiPipeline.from_pretrained(
                 source, variant="bf16",
                 torch_dtype=torch.bfloat16, token=token,
+                cache_dir=cache,
             )
             pipe.enable_vae_tiling()
             pipe.enable_model_cpu_offload()
@@ -262,6 +287,7 @@ def load_pipeline(model_cfg: dict, model_dir: Path):
         with Spinner(f"Loading {model_id} weights"):
             pipe = CogVideoXPipeline.from_pretrained(
                 source, torch_dtype=torch.bfloat16, token=token,
+                cache_dir=cache,
             )
             pipe.vae.enable_tiling()
             pipe.enable_model_cpu_offload()
@@ -306,15 +332,26 @@ def generate_video(
     fps = MODEL_FPS[model_id]
 
     if model_id == "ltx-video-2":
-        output = pipe(
+        from diffusers.pipelines.ltx2.export_utils import encode_video
+        video, audio = pipe(
             prompt=prompt_text,
+            negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted",
             width=w, height=h,
             num_frames=num_frames,
+            frame_rate=float(fps),
             num_inference_steps=steps,
             guidance_scale=cfg,
             generator=generator,
-        ).frames[0]
-        export_to_video(output, str(out_path), fps=fps)
+            output_type="np",
+            return_dict=False,
+        )
+        encode_video(
+            video[0],
+            fps=float(fps),
+            audio=audio[0].float().cpu(),
+            audio_sample_rate=pipe.vocoder.config.output_sampling_rate,
+            output_path=str(out_path),
+        )
         return
 
     if model_id == "hunyuan-video":

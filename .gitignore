@@ -5,3 +5,4 @@ docs/
 .venv/
 poetry.lock
 .claude/
+config/settings.json

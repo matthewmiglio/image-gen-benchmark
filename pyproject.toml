@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "torch>=2.2",
-    "diffusers>=0.30",
+    "diffusers @ git+https://github.com/huggingface/diffusers.git",
     "transformers>=4.40",
     "accelerate>=0.30",
     "huggingface-hub>=0.23",
@@ -19,6 +19,14 @@ dependencies = [
 
 [tool.poetry]
 package-mode = false
+
+[[tool.poetry.source]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+priority = "explicit"
+
+[tool.poetry.dependencies]
+torch = {version = ">=2.2", source = "pytorch-cu128"}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
